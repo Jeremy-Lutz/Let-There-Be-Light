@@ -2,6 +2,8 @@ import numpy as np
 import tensorflow as tf
 import datetime
 import rawpy
+import glob
+import os
 
 
 def get_short_image(image_path):
@@ -14,6 +16,8 @@ def get_short_image(image_path):
     """
     with rawpy.imread(image_path) as raw:
         raw_data = raw.raw_image.copy()
+        raw_data = raw_data.astype(np.float32)
+        raw_data = np.maximum(raw_data - 512, 0) / (16383 - 512) #Subtract the black level
         rows, cols = raw_data.shape
 
         # this transforms the data into stacked 2x2 patches somehow
@@ -44,8 +48,28 @@ def process_data():
     """
     # TODO Collect data from Sony images, return tf.dataset object (probably use batched data loading)
     # TODO Need to process short_exp images by subtracting black level, scale up with proper amp ratio
-    im_data = None
-    amp_ratio = None
-    im_data = np.maximum(im_data - 512, 0) / (16383 - 512)
 
+    # Please change the directory to wherever you're storing your files
+    in_dir  = './dataset/Sony/short/'
+    gt_dir = './dataset/Sony/long/'
 
+    #Get the image IDs
+    in_pathlist = glob.glob(gt_dir + '0*.ARW')
+    in_ids = [int(os.path.basename(in_path)[0:5]) for in_path in in_pathlist]
+    #Preallocate space for data to speed up
+    gt_data = [None]*len(in_ids)
+    in_data = [None]*len(in_ids)
+
+    for i in np.random.permutation(len(in_ids)):
+        in_path = glob.glob(in_dir + '%05d_00*.ARW' % in_ids[i])
+        gt_path = glob.glob(gt_dir + '%05d_00*.ARW' % in_ids[i])
+        in_exposure = 0.1
+        gt_exposure = float(os.path.basename(str(gt_path))[9:11])
+        amp_ratio = min(gt_exposure/in_exposure,300)
+
+        # print(in_path[0])
+        in_raw = get_short_image(in_path[0])
+        in_data[i] = np.expand_dims(in_raw, axis=0)*amp_ratio
+        gt_raw = get_long_image(gt_path[0])
+        gt_data[i] = np.expand_dims(np.float32(gt_raw)/65535.0, axis=0)
+    return gt_data,in_data
