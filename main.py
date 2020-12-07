@@ -1,40 +1,117 @@
 import tensorflow as tf
 from u_net import U_Net
+from preprocessing import process_data
 import numpy as np
-import scipy
-
+import random
+import time
 
 class Model(tf.keras.Model):
     def __init__(self):
         super(Model, self).__init__()
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-        self.batch_size = 100
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+        self.batch_size = 5
 
         self.u_net = U_Net(12)
-        self.transpose_conv = tf.keras.layers.Conv2DTranspose(3, 2, strides=2, padding='SAME')
+        self.transpose_conv = tf.keras.layers.Conv2DTranspose(3, 2, strides=2, padding='SAME', activation='relu')
 
     def call(self, im_data):
-        pass
+
+        im_data = self.u_net(im_data)
+        im_data = self.transpose_conv(im_data)
+
+        return im_data
 
     def loss(self, predicted_output, ground_truth):
-        pass
+
+        return tf.reduce_sum(tf.math.abs(predicted_output-ground_truth))
 
     def accuracy(self, raw_input, ground_truth):
-        # TODO: need to return PSNR and SSIM metrics
-        pass
+
+        raw_input = np.maximum(raw_input, 255)
+
+        ssim = tf.image.ssim(raw_input, ground_truth, 255)
+        psnr = tf.image.psnr(raw_input, ground_truth, 255)
+        return psnr, ssim
 
 
-def train(model):
-    # TODO: we need to iterate through every batch, for each iteration crop to random 512x512 sub-image...
-    # rotate, flip randomly as well
-    pass
+def train(model, in_dataset, gt_dataset):
+    i = 0
+    for in_images in in_dataset:
+        gt_images = gt_dataset.next()
 
-def test(model):
-    # TODO: iterate through testing data, acquire accuracy values return average
-    pass
+        # crop out random 512 x 512 patch
+        patch_dim = 512
+
+        max_row = tf.shape(in_images)[1].numpy() - patch_dim
+        max_col = tf.shape(in_images)[1].numpy() - patch_dim
+
+        row_num = random.randint(0, max_row)
+        col_num = random.randint(0, max_col)
+
+        in_images = in_images[:, row_num:row_num+patch_dim, col_num:col_num+patch_dim, :]
+        gt_images = gt_images[:, row_num*2:(row_num+patch_dim)*2, col_num*2:(col_num+patch_dim)*2]
+
+        # rotate a random number of times
+        rot_num = int(random.random()*4)
+        in_images = tf.image.rot90(in_images, rot_num)
+        gt_images = tf.image.rot90(gt_images, rot_num)
+
+        with tf.GradientTape() as tape:
+            pred_images = model.call(in_images)
+            loss = model.loss(pred_images, gt_images)
+
+        grads = tape.gradient(loss, model.trainable_variables)
+        model.optimizer.apply_gradients(zip(grads, model.trainable_variables))
+        print(f"completed {i}th batch")
+        if i % 100 == 0 and i != 0:
+            val_psnr, val_ssim = model.accuracy(model.call(in_images), gt_images)
+            print(f"After epoch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
+        i+=1
+
+
+def test(model, in_dataset, gt_dataset):
+    ssim_vals = []
+    psnr_vals = []
+
+    for in_images in in_dataset:
+        gt_images = gt_dataset.next()
+        psnr, ssim = model.accuracy(in_images, gt_images)
+        ssim_vals.append(ssim)
+        psnr_vals.append(psnr)
+
+    return tf.reduce_mean(psnr_vals), tf.reduce_mean(ssim_vals)
+
 
 def main():
-    # TODO: load the tf.dataset object
-    # TODO: train, test the model
 
-    pass
+    # TODO: train, test the model train for no more than 2000 epochs for now
+    model = Model()
+    data_path = "F:\\Final Project Data\\Sony"
+
+    train_file = "Sony_train_list.txt"
+    test_file = "Sony_test_list.txt"
+    val_file = "Sony_val_list.txt"  # filename for validation dataset
+
+    train_in_images, train_gt_images = process_data(data_path, train_file, model.batch_size)
+    test_in_images, test_gt_images = process_data(data_path, test_file, model.batch_size)
+    val_in_images, val_gt_images = process_data(data_path, val_file, model.batch_size)
+
+    epochs = 2000
+
+    for i in range(epochs):
+        start_time = time.time()
+        train(model, train_in_images.as_numpy_iterator(), train_gt_images.as_numpy_iterator())
+        end_time = time.time()
+        print(f"Completed epoch #{i} after {end_time-start_time} seconds")
+        if i % 100 == 0 and i != 0:
+            val_psnr, val_ssim = test(model, val_in_images.as_numpy_iterator(), val_gt_images.as_numpy_iterator())
+            print(f"After epoch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
+
+    psnr, ssim = test(model, test_in_images.as_numpy_iterator(), test_gt_images.as_numpy_iterator())
+
+    print(f"Mean PSNR: {psnr.numpy()}")
+    print(f"Mean SSIM: {ssim.numpy()}")
+
+
+if __name__ == '__main__':
+    main()

@@ -57,7 +57,6 @@ class U_Net(tf.keras.layers.Layer):
 
         self.out_conv = tf.keras.layers.Conv2D(out_chans, 1, padding='same')
 
-    @tf.function
     def call(self, data):
 
         data0 = self.conv0_2(self.conv0_1(data))
@@ -74,16 +73,16 @@ class U_Net(tf.keras.layers.Layer):
         data4 = self.max4(data3)
         data4 = self.conv4_2(self.conv4_1(data4))
 
-        s_data1 = tf.concat(self.up_conv1(data4), data3)
+        s_data1 = tf.concat([self.up_conv1(data4), data3], -1)
         s_data1 = self.s_conv1_2(self.s_conv1_1(s_data1))
 
-        s_data2 = tf.concat(self.up_conv2(s_data1), data2)
+        s_data2 = tf.concat([self.up_conv2(s_data1), data2], -1)
         s_data2 = self.s_conv2_2(self.s_conv2_1(s_data2))
 
-        s_data3 = tf.concat(self.up_conv3(s_data2), data1)
+        s_data3 = tf.concat([self.up_conv3(s_data2), data1], -1)
         s_data3 = self.s_conv3_2(self.s_conv3_1(s_data3))
 
-        s_data4 = tf.concat(self.up_conv4(s_data3), data0)
+        s_data4 = tf.concat([self.up_conv4(s_data3), data0], -1)
         s_data4 = self.s_conv4_2(self.s_conv4_1(s_data4))
 
         return self.out_conv(s_data4)
@@ -101,7 +100,6 @@ class Up_Conv(tf.keras.layers.Layer):
         self.up_sample = tf.keras.layers.UpSampling2D()
         self.conv2d = tf.keras.layers.Conv2D(out_chans, filter_sz, padding='same')
 
-    @tf.function
     def call(self, data):
         up_sample = self.up_sample(data)
         return self.conv2d(up_sample)
