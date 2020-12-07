@@ -17,11 +17,20 @@ class Model(tf.keras.Model):
         pass
 
     def loss(self, predicted_output, ground_truth):
-        pass
+        # Input: Two List of images
+        # Output: The loss
+        return tf.reduce_mean(tf.abs(np.subtract(predicted_output, ground_truth))).numpy()
 
     def accuracy(self, raw_input, ground_truth):
-        # TODO: need to return PSNR and SSIM metrics
-        pass
+        # Input: Two List of images
+        # Output: The PSNR and SSIM means
+        
+        def f(x,y):
+            return tf.image.psnr(x, y, 1.0)
+            
+        SSIM = tf.reduce_mean(tf.image.ssim(raw_input, ground_truth, 1.0)).numpy()
+        PSNR = tf.reduce_mean([f(x, y) for x, y in zip(raw_input, ground_truth)]).numpy()
+        return PSNR, SSIM
 
 
 def train(model):
@@ -37,4 +46,7 @@ def main():
     # TODO: load the tf.dataset object
     # TODO: train, test the model
 
-    pass
+    return
+
+if __name__ == '__main__':
+    main()
