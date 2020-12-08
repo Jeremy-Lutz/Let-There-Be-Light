@@ -4,22 +4,21 @@ from preprocessing import process_data
 import numpy as np
 import random
 import time
+import scipy
 
 class Model(tf.keras.Model):
     def __init__(self):
         super(Model, self).__init__()
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-        self.batch_size = 5
+        self.batch_size = 6
 
         self.u_net = U_Net(12)
-        self.transpose_conv = tf.keras.layers.Conv2DTranspose(3, 2, strides=2, padding='SAME', activation='relu')
 
     def call(self, im_data):
 
         im_data = self.u_net(im_data)
-        im_data = self.transpose_conv(im_data)
 
-        return im_data
+        return tf.nn.depth_to_space(im_data, 2)
 
     def loss(self, predicted_output, ground_truth):
 
@@ -27,14 +26,15 @@ class Model(tf.keras.Model):
 
     def accuracy(self, raw_input, ground_truth):
 
-        raw_input = np.maximum(raw_input, 255)
+        raw_input = np.minimum(raw_input, 1.)
 
-        ssim = tf.image.ssim(raw_input, ground_truth, 255)
-        psnr = tf.image.psnr(raw_input, ground_truth, 255)
+        ssim = tf.image.ssim(raw_input, ground_truth, 1)
+        psnr = tf.image.psnr(raw_input, ground_truth, 1)
         return psnr, ssim
 
 
 def train(model, in_dataset, gt_dataset):
+    checkpoint_dir = "/tmp/training_checkpoints"
     i = 0
     for in_images in in_dataset:
         gt_images = gt_dataset.next()
@@ -42,14 +42,14 @@ def train(model, in_dataset, gt_dataset):
         # crop out random 512 x 512 patch
         patch_dim = 512
 
-        max_row = tf.shape(in_images)[1].numpy() - patch_dim
-        max_col = tf.shape(in_images)[1].numpy() - patch_dim
+        max_row = tf.shape(in_images)[1].numpy() - patch_dim#1424,2144
+        max_col = tf.shape(in_images)[2].numpy() - patch_dim
 
         row_num = random.randint(0, max_row)
         col_num = random.randint(0, max_col)
 
         in_images = in_images[:, row_num:row_num+patch_dim, col_num:col_num+patch_dim, :]
-        gt_images = gt_images[:, row_num*2:(row_num+patch_dim)*2, col_num*2:(col_num+patch_dim)*2]
+        gt_images = gt_images[:, row_num*2:(row_num+patch_dim)*2, col_num*2:(col_num+patch_dim)*2, :]
 
         # rotate a random number of times
         rot_num = int(random.random()*4)
@@ -65,7 +65,7 @@ def train(model, in_dataset, gt_dataset):
         print(f"completed {i}th batch")
         if i % 100 == 0 and i != 0:
             val_psnr, val_ssim = model.accuracy(model.call(in_images), gt_images)
-            print(f"After epoch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
+            print(f"After batch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
         i+=1
 
 
@@ -75,7 +75,7 @@ def test(model, in_dataset, gt_dataset):
 
     for in_images in in_dataset:
         gt_images = gt_dataset.next()
-        psnr, ssim = model.accuracy(in_images, gt_images)
+        psnr, ssim = model.accuracy(model.call(in_images), gt_images)
         ssim_vals.append(ssim)
         psnr_vals.append(psnr)
 
@@ -114,4 +114,5 @@ def main():
 
 
 if __name__ == '__main__':
+    #tf.keras.backend.set_floatx('float16')
     main()

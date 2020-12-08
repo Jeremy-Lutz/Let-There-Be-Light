@@ -14,7 +14,7 @@ def get_short_image(image_path, amp_ratio):
     :return: an n-d tensor of raw pixel values (tf.float32)
     """
     with rawpy.imread(image_path.numpy().decode()) as raw:
-        raw_data = raw.raw_image.copy().astype('float32')
+        raw_data = raw.raw_image_visible.copy().astype('float32')
         rows, cols = raw_data.shape
 
         # this transforms the data into stacked 2x2 patches somehow
@@ -38,7 +38,7 @@ def get_long_image(image_path):
     with rawpy.imread(image_path.numpy().decode()) as raw:
         sRGB_data = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16)
 
-    return tf.convert_to_tensor(sRGB_data, dtype=tf.float32)
+    return tf.convert_to_tensor(sRGB_data, dtype=tf.float32)/65535
 
 
 def process_data(data_path, text_file, batch_sz):
