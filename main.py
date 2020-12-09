@@ -5,6 +5,7 @@ import numpy as np
 import random
 import time
 import scipy
+from matplotlib import pyplot as plt
 
 class Model(tf.keras.Model):
     def __init__(self):
@@ -64,8 +65,11 @@ def train(model, in_dataset, gt_dataset):
         model.optimizer.apply_gradients(zip(grads, model.trainable_variables))
         print(f"completed {i}th batch")
         if i % 100 == 0 and i != 0:
-            val_psnr, val_ssim = model.accuracy(model.call(in_images), gt_images)
+            pred_images = model.call(in_images)
+            val_psnr, val_ssim = model.accuracy(pred_images, gt_images)
             print(f"After batch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
+            a=tf.keras.preprocessing.image.array_to_img(255*np.minimum(pred_images[0],1.))
+            a.show()
         i+=1
 
 

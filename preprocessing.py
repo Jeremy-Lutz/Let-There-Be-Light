@@ -46,8 +46,6 @@ def process_data(data_path, text_file, batch_sz):
 
     :return:
     """
-    # TODO Collect data from Sony images, return tf.dataset object (probably use batched data loading)
-    # TODO Need to process short_exp images by subtracting black level, scale up with proper amp ratio
 
     in_paths = []
     gt_paths = []
@@ -56,7 +54,7 @@ def process_data(data_path, text_file, batch_sz):
 
         in_exp = float(in_path.split('_')[-1][:-5])
         gt_exp = float(gt_path.split('_')[-1][:-5])
-        amp_ratio = gt_exp / in_exp
+        amp_ratio = min(gt_exp / in_exp, 300)
 
         in_paths.append((os.path.join(data_path, os.path.normpath(in_path)), amp_ratio))
         gt_paths.append(os.path.join(data_path, os.path.normpath(gt_path)))

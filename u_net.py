@@ -38,22 +38,26 @@ class U_Net(tf.keras.layers.Layer):
         self.conv4_2 = tf.keras.layers.Conv2D(512, 3, padding='same')
 
         # number of channels halved because of concatenation step
-        self.up_conv1 = tf.keras.layers.Conv2DTranspose(256, 2, strides=(2, 2), padding='same', activation='relu')
+        self.up_conv1 = Up_Conv(256, 2)
+        #tf.keras.layers.Conv2DTranspose(256, 2, strides=(2, 2), padding='same', activation='relu')
 
         self.s_conv1_1 = tf.keras.layers.Conv2D(256, 3, padding='same')
         self.s_conv1_2 = tf.keras.layers.Conv2D(256, 3, padding='same')
 
-        self.up_conv2 = tf.keras.layers.Conv2DTranspose(128, 2, strides=(2, 2), padding='same', activation='relu')
+        self.up_conv2 = Up_Conv(128, 2)
+        #tf.keras.layers.Conv2DTranspose(128, 2, strides=(2, 2), padding='same', activation='relu')
 
         self.s_conv2_1 = tf.keras.layers.Conv2D(128, 3, padding='same')
         self.s_conv2_2 = tf.keras.layers.Conv2D(128, 3, padding='same')
 
-        self.up_conv3 = tf.keras.layers.Conv2DTranspose(64, 2, strides=(2, 2), padding='same', activation='relu')
+        self.up_conv3 = Up_Conv(64, 2)
+        #tf.keras.layers.Conv2DTranspose(64, 2, strides=(2, 2), padding='same', activation='relu')
 
         self.s_conv3_1 = tf.keras.layers.Conv2D(64, 3, padding='same')
         self.s_conv3_2 = tf.keras.layers.Conv2D(64, 3, padding='same')
 
-        self.up_conv4 = tf.keras.layers.Conv2DTranspose(32, 2, strides=(2, 2), padding='same', activation='relu')
+        self.up_conv4 = Up_Conv(32, 2)
+        #tf.keras.layers.Conv2DTranspose(32, 2, strides=(2, 2), padding='same', activation='relu')
 
         self.s_conv4_1 = tf.keras.layers.Conv2D(32, 3, padding='same')
         self.s_conv4_2 = tf.keras.layers.Conv2D(32, 3, padding='same')
@@ -103,10 +107,9 @@ class Up_Conv(tf.keras.layers.Layer):
         self.up_sample = tf.keras.layers.UpSampling2D()
         self.conv2d = tf.keras.layers.Conv2D(out_chans, filter_sz, padding='same')
 
-    @tf.function
     def call(self, data):
         up_sample = self.up_sample(data)
-        return self.conv2d(up_sample)
+        return self.l_relu(self.conv2d(up_sample))
 
 
 
