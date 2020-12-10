@@ -80,16 +80,16 @@ class U_Net(tf.keras.layers.Layer):
         data4 = self.max4(data3)
         data4 = self.l_relu(self.conv4_2(self.l_relu(self.conv4_1(data4))))
 
-        s_data1 = tf.concat([self.up_conv1(data4), data3], -1)
+        s_data1 = tf.concat([self.up_conv1(data4), data3], axis=-1)
         s_data1 = self.l_relu(self.s_conv1_2(self.l_relu(self.s_conv1_1(s_data1))))
 
-        s_data2 = tf.concat([self.up_conv2(s_data1), data2], -1)
+        s_data2 = tf.concat([self.up_conv2(s_data1), data2], axis=-1)
         s_data2 = self.l_relu(self.s_conv2_2(self.l_relu(self.s_conv2_1(s_data2))))
 
-        s_data3 = tf.concat([self.up_conv3(s_data2), data1], -1)
+        s_data3 = tf.concat([self.up_conv3(s_data2), data1], axis=-1)
         s_data3 = self.l_relu(self.s_conv3_2(self.l_relu(self.s_conv3_1(s_data3))))
 
-        s_data4 = tf.concat([self.up_conv4(s_data3), data0], -1)
+        s_data4 = tf.concat([self.up_conv4(s_data3), data0], axis=-1)
         s_data4 = self.l_relu(self.s_conv4_2(self.l_relu(self.s_conv4_1(s_data4))))
 
         return self.out_conv(s_data4)

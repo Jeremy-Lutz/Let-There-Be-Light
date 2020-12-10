@@ -33,15 +33,15 @@ def get_long_image(image_path):
     """This takes the image filepath (as a single element tensor) and returns a numpy array of raw pixel values.
     This is intended only for long exposure images, which use sRGB data
     :param image_path: filepath (as tensor tf.string)
-    :return: an n-d tensor of sRGB pixel values (tf.unit16)
+    :return: an n-d tensor of sRGB pixel values (tf.float32)
     """
     with rawpy.imread(image_path.numpy().decode()) as raw:
-        sRGB_data = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16)
+        sRGB_data = raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
 
     return tf.convert_to_tensor(sRGB_data, dtype=tf.float32)/65535
 
 
-def process_data(data_path, text_file, batch_sz):
+def process_data(data_path, text_file, batch_sz, is_training=False):
     """
 
     :return:
@@ -59,8 +59,8 @@ def process_data(data_path, text_file, batch_sz):
         in_paths.append((os.path.join(data_path, os.path.normpath(in_path)), amp_ratio))
         gt_paths.append(os.path.join(data_path, os.path.normpath(gt_path)))
 
-    in_dataset = tf.data.Dataset.from_generator(lambda: in_paths, (tf.string, tf.float32))
-    gt_dataset = tf.data.Dataset.from_tensor_slices(gt_paths)
+    in_dataset = tf.data.Dataset.from_generator(lambda: in_paths[:600], (tf.string, tf.float32))
+    gt_dataset = tf.data.Dataset.from_tensor_slices(gt_paths[:600])
 
     in_dataset = in_dataset.map(map_func=lambda x, y: tf.py_function(get_short_image, [x, y], Tout=tf.float32))
     gt_dataset = gt_dataset.map(map_func=lambda x: tf.py_function(get_long_image, [x], Tout=tf.float32))
@@ -69,6 +69,7 @@ def process_data(data_path, text_file, batch_sz):
 
     in_dataset = in_dataset.prefetch(1)
     gt_dataset = gt_dataset.prefetch(1)
+
 
     return in_dataset, gt_dataset
 

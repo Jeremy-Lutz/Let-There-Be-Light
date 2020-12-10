@@ -4,40 +4,40 @@ from preprocessing import process_data
 import numpy as np
 import random
 import time
-import scipy
+import os
 from matplotlib import pyplot as plt
 
 class Model(tf.keras.Model):
     def __init__(self):
         super(Model, self).__init__()
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.00001)
         self.batch_size = 6
 
         self.u_net = U_Net(12)
 
-    def call(self, im_data):
+    def call(self, image_data):
 
-        im_data = self.u_net(im_data)
+        image_data = self.u_net(tf.math.minimum(image_data, 1.))
 
-        return tf.nn.depth_to_space(im_data, 2)
+        return tf.math.minimum(tf.nn.depth_to_space(image_data, 2), 1.)
 
-    def loss(self, predicted_output, ground_truth):
+    def loss(self, pred_image, ground_truth):
 
-        return tf.reduce_sum(tf.math.abs(predicted_output-ground_truth))
+        return tf.reduce_sum(tf.math.abs(pred_image-ground_truth))
 
-    def accuracy(self, raw_input, ground_truth):
+    def accuracy(self, pred_image, ground_truth):
 
-        raw_input = np.minimum(raw_input, 1.)
-
-        ssim = tf.image.ssim(raw_input, ground_truth, 1)
-        psnr = tf.image.psnr(raw_input, ground_truth, 1)
+        ssim = tf.image.ssim(pred_image, ground_truth, 1)
+        psnr = tf.image.psnr(pred_image, ground_truth, 1)
         return psnr, ssim
 
 
 def train(model, in_dataset, gt_dataset):
-    checkpoint_dir = "/tmp/training_checkpoints"
+    losses = []
+    batches = []
     i = 0
     for in_images in in_dataset:
+        i += 1
         gt_images = gt_dataset.next()
 
         # crop out random 512 x 512 patch
@@ -60,63 +60,81 @@ def train(model, in_dataset, gt_dataset):
         with tf.GradientTape() as tape:
             pred_images = model.call(in_images)
             loss = model.loss(pred_images, gt_images)
+            losses.append(loss)
+            batches.append(i)
 
         grads = tape.gradient(loss, model.trainable_variables)
         model.optimizer.apply_gradients(zip(grads, model.trainable_variables))
-        print(f"completed {i}th batch")
-        if i % 100 == 0 and i != 0:
+        print(f"completed batch #{i}")
+        if i % 20 == 0:
             pred_images = model.call(in_images)
             val_psnr, val_ssim = model.accuracy(pred_images, gt_images)
             print(f"After batch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
-            a=tf.keras.preprocessing.image.array_to_img(255*np.minimum(pred_images[0],1.))
-            a.show()
-        i+=1
+            #a=tf.keras.preprocessing.image.array_to_img(np.minimum(pred_images[0],1.))
+            #a.show()
+            #plt.plot(losses)
+            #plt.show()
+    return losses
 
 
 def test(model, in_dataset, gt_dataset):
     ssim_vals = []
     psnr_vals = []
-
+    i = 0
     for in_images in in_dataset:
+        i += 1
         gt_images = gt_dataset.next()
-        psnr, ssim = model.accuracy(model.call(in_images), gt_images)
+        pred_images = model.call(in_images)
+
+        psnr, ssim = model.accuracy(pred_images, gt_images)
         ssim_vals.append(ssim)
         psnr_vals.append(psnr)
 
+        save_dir = "tmp\\testing_results"
+        img_name = f"testing_img_num_{i}.jpg"
+        tf.keras.preprocessing.image.save_img(os.path.join(save_dir,img_name), pred_images[0])
     return tf.reduce_mean(psnr_vals), tf.reduce_mean(ssim_vals)
 
 
 def main():
 
-    # TODO: train, test the model train for no more than 2000 epochs for now
     model = Model()
+
     data_path = "F:\\Final Project Data\\Sony"
 
     train_file = "Sony_train_list.txt"
     test_file = "Sony_test_list.txt"
     val_file = "Sony_val_list.txt"  # filename for validation dataset
 
-    train_in_images, train_gt_images = process_data(data_path, train_file, model.batch_size)
-    test_in_images, test_gt_images = process_data(data_path, test_file, model.batch_size)
-    val_in_images, val_gt_images = process_data(data_path, val_file, model.batch_size)
+    train_in_images, train_gt_images = process_data(data_path, train_file, model.batch_size, is_training=True)
+    test_in_images, test_gt_images = process_data(data_path, val_file, 1)
+    val_in_images, val_gt_images = process_data(data_path, val_file, 1)
 
-    epochs = 2000
-
+    epochs = 5
+    losses = []
     for i in range(epochs):
         start_time = time.time()
-        train(model, train_in_images.as_numpy_iterator(), train_gt_images.as_numpy_iterator())
+        losses = losses + train(model, train_in_images.as_numpy_iterator(), train_gt_images.as_numpy_iterator())
         end_time = time.time()
-        print(f"Completed epoch #{i} after {end_time-start_time} seconds")
-        if i % 100 == 0 and i != 0:
+        print(f"Completed epoch #{i+1} after {end_time-start_time} seconds")
+        if i+1 % 100 == 0:
             val_psnr, val_ssim = test(model, val_in_images.as_numpy_iterator(), val_gt_images.as_numpy_iterator())
             print(f"After epoch {i}, PSNR: {val_psnr}, SSIM: {val_ssim}")
-
+    graph_losses(losses)
     psnr, ssim = test(model, test_in_images.as_numpy_iterator(), test_gt_images.as_numpy_iterator())
 
     print(f"Mean PSNR: {psnr.numpy()}")
     print(f"Mean SSIM: {ssim.numpy()}")
 
 
+
+def graph_losses(losses):
+    plt.plot(losses, '-o')
+    plt.ylabel('L1 loss')
+    plt.xlabel('training batch')
+    plt.show()
+
 if __name__ == '__main__':
     #tf.keras.backend.set_floatx('float16')
     main()
+
