@@ -1,23 +1,20 @@
 import numpy as np
 import tensorflow as tf
-import datetime
 import rawpy
-import glob
 import os
 
 
-def get_short_image(image_path):
+def get_short_image(image_path, amp_ratio):
     """
-    This takes the image filepath and returns a numpy array of raw pixel values.
+    This takes the image filepath (as a single element tensor) and returns a numpy array of raw pixel values.
     This is intended only for the short-exposure images, the reference long exposure images use sRGB data
     NOTE: This only works for Bayer array data (Sony camera data), Fujifilm camera uses X-Trans rather than Bayer
-    :param image_path: filepath for the image to be processed
-    :return: an n-d array of raw pixel values
+    :param image_path: filepath for the image to be processed (as tensor tf.string)
+    :param amp_ratio: amplification ratio to multiply image with (as tensor tf.float32)
+    :return: an n-d tensor of raw pixel values (tf.float32)
     """
-    with rawpy.imread(image_path) as raw:
-        raw_data = raw.raw_image.copy()
-        raw_data = raw_data.astype(np.float32)
-        raw_data = np.maximum(raw_data - 512, 0) / (16383 - 512) #Subtract the black level
+    with rawpy.imread(image_path.numpy().decode()) as raw:
+        raw_data = raw.raw_image_visible.copy().astype('float32')
         rows, cols = raw_data.shape
 
         # this transforms the data into stacked 2x2 patches somehow
@@ -26,50 +23,61 @@ def get_short_image(image_path):
         # this transforms the data into [row/2 x col/2 x 4] array with last index being color in the order RGGB
         raw_data = raw_data.reshape(rows//2, -1, 4)
 
-    return raw_data
+        # subtract off black level, multiply by amp_factor
+        raw_data = amp_ratio*np.maximum(raw_data - 512, 0)/(16383 - 512)
+
+    return tf.convert_to_tensor(raw_data)
 
 
 def get_long_image(image_path):
+    """This takes the image filepath (as a single element tensor) and returns a numpy array of raw pixel values.
+    This is intended only for long exposure images, which use sRGB data
+    :param image_path: filepath (as tensor tf.string)
+    :return: an n-d tensor of sRGB pixel values (tf.float32)
+    """
+    with rawpy.imread(image_path.numpy().decode()) as raw:
+        sRGB_data = raw.postprocess(use_camera_wb=True, half_size=False, no_auto_bright=True, output_bps=16)
+
+    return tf.convert_to_tensor(sRGB_data, dtype=tf.float32)/65535
+
+
+def process_data(data_path, text_file, batch_sz):
+    """
+    This processes the data given appropriate filepaths and a batch size and returns tf.dataset objects
+
+    :param data_path: filepath for data
+    :param text_file: name of textfile with image anems
+    :param batch_sz: batch size of the data
+    :return: two tf.dataset objects, one for input data the other for ground truth data
     """
 
+    in_paths = []
+    gt_paths = []
+    paths = []
+    for line in open(os.path.join(data_path, text_file)).readlines():
+        in_path, gt_path = line.split()[0:2]
+        in_path = os.path.join(data_path, os.path.normpath(in_path))
+        gt_path = os.path.join(data_path, os.path.normpath(gt_path))
 
-    :param image_path:
-    :return:
-    """
-    with rawpy.imread(image_path) as raw:
-        sRGB_data = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16)
+        in_exp = float(in_path.split('_')[-1][:-5])
+        gt_exp = float(gt_path.split('_')[-1][:-5])
+        amp_ratio = min(gt_exp / in_exp, 300)
 
-    return sRGB_data
+        in_paths.append((in_path, amp_ratio))
+        gt_paths.append(gt_path)
+        paths.append((in_path, gt_path, amp_ratio))
 
-def process_data():
-    """
+    in_dataset = tf.data.Dataset.from_generator(lambda: in_paths, (tf.string, tf.float32))
+    gt_dataset = tf.data.Dataset.from_tensor_slices(gt_paths)
 
-    :return:
-    """
-    # TODO Collect data from Sony images, return tf.dataset object (probably use batched data loading)
-    # TODO Need to process short_exp images by subtracting black level, scale up with proper amp ratio
+    in_dataset = in_dataset.map(map_func=lambda x, y: tf.py_function(get_short_image, [x, y], Tout=tf.float32))
+    gt_dataset = gt_dataset.map(map_func=lambda x: tf.py_function(get_long_image, [x], Tout=tf.float32))
 
-    # Please change the directory to wherever you're storing your files
-    in_dir  = './dataset/Sony/short/'
-    gt_dir = './dataset/Sony/long/'
+    in_dataset = in_dataset.batch(batch_sz)
+    gt_dataset = gt_dataset.batch(batch_sz)
 
-    #Get the image IDs
-    in_pathlist = glob.glob(gt_dir + '0*.ARW')
-    in_ids = [int(os.path.basename(in_path)[0:5]) for in_path in in_pathlist]
-    #Preallocate space for data to speed up
-    gt_data = [None]*len(in_ids)
-    in_data = [None]*len(in_ids)
+    in_dataset = in_dataset.prefetch(1)
+    gt_dataset = gt_dataset.prefetch(1)
 
-    for i in np.random.permutation(len(in_ids)):
-        in_path = glob.glob(in_dir + '%05d_00*.ARW' % in_ids[i])
-        gt_path = glob.glob(gt_dir + '%05d_00*.ARW' % in_ids[i])
-        in_exposure = 0.1
-        gt_exposure = float(os.path.basename(str(gt_path))[9:11])
-        amp_ratio = min(gt_exposure/in_exposure,300)
+    return in_dataset, gt_dataset
 
-        # print(in_path[0])
-        in_raw = get_short_image(in_path[0])
-        in_data[i] = np.expand_dims(in_raw, axis=0)*amp_ratio
-        gt_raw = get_long_image(gt_path[0])
-        gt_data[i] = np.expand_dims(np.float32(gt_raw)/65535.0, axis=0)
-    return gt_data,in_data
