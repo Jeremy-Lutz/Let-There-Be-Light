@@ -49,27 +49,31 @@ def process_data(data_path, text_file, batch_sz, is_training=False):
 
     in_paths = []
     gt_paths = []
+    paths = []
     for line in open(os.path.join(data_path, text_file)).readlines():
         in_path, gt_path = line.split()[0:2]
+        in_path = os.path.join(data_path, os.path.normpath(in_path))
+        gt_path = os.path.join(data_path, os.path.normpath(gt_path))
 
         in_exp = float(in_path.split('_')[-1][:-5])
         gt_exp = float(gt_path.split('_')[-1][:-5])
         amp_ratio = min(gt_exp / in_exp, 300)
 
-        in_paths.append((os.path.join(data_path, os.path.normpath(in_path)), amp_ratio))
-        gt_paths.append(os.path.join(data_path, os.path.normpath(gt_path)))
+        in_paths.append((in_path, amp_ratio))
+        gt_paths.append(gt_path)
+        paths.append((in_path, gt_path, amp_ratio))
 
-    in_dataset = tf.data.Dataset.from_generator(lambda: in_paths[:600], (tf.string, tf.float32))
-    gt_dataset = tf.data.Dataset.from_tensor_slices(gt_paths[:600])
+    in_dataset = tf.data.Dataset.from_generator(lambda: in_paths, (tf.string, tf.float32))
+    gt_dataset = tf.data.Dataset.from_tensor_slices(gt_paths)
 
     in_dataset = in_dataset.map(map_func=lambda x, y: tf.py_function(get_short_image, [x, y], Tout=tf.float32))
     gt_dataset = gt_dataset.map(map_func=lambda x: tf.py_function(get_long_image, [x], Tout=tf.float32))
+
     in_dataset = in_dataset.batch(batch_sz)
     gt_dataset = gt_dataset.batch(batch_sz)
 
     in_dataset = in_dataset.prefetch(1)
     gt_dataset = gt_dataset.prefetch(1)
-
 
     return in_dataset, gt_dataset
 
