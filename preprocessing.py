@@ -41,10 +41,14 @@ def get_long_image(image_path):
     return tf.convert_to_tensor(sRGB_data, dtype=tf.float32)/65535
 
 
-def process_data(data_path, text_file, batch_sz, is_training=False):
+def process_data(data_path, text_file, batch_sz):
     """
+    This processes the data given appropriate filepaths and a batch size and returns tf.dataset objects
 
-    :return:
+    :param data_path: filepath for data
+    :param text_file: name of textfile with image anems
+    :param batch_sz: batch size of the data
+    :return: two tf.dataset objects, one for input data the other for ground truth data
     """
 
     in_paths = []

@@ -82,6 +82,13 @@ def train(model, in_dataset, gt_dataset):
 
 
 def test(model, in_dataset, gt_dataset):
+    """
+    This tests the model, produces image results and returns PSNR and SSIM
+    :param model: model to test
+    :param in_dataset: input dataset as an iterator
+    :param gt_dataset: ground-truth dataset as an iterator
+    :return: PSNR, SSIM
+    """
     ssim_vals = []
     psnr_vals = []
     i = 0
@@ -101,6 +108,10 @@ def test(model, in_dataset, gt_dataset):
 
 
 def main():
+    """
+    This fetches the data, runs the model and tests the model
+    :return:
+    """
 
     model = Model()
 
@@ -109,7 +120,7 @@ def main():
     test_file = "Sony_test_list.txt"
     val_file = "Sony_val_list.txt"  # filename for validation dataset
 
-    train_in_images, train_gt_images = process_data(data_path, train_file, model.batch_size, is_training=True)
+    train_in_images, train_gt_images = process_data(data_path, train_file, model.batch_size)
     test_in_images, test_gt_images = process_data(data_path, val_file, 1)  # using the validation data for brevity
     val_in_images, val_gt_images = process_data(data_path, val_file, 1)
 
